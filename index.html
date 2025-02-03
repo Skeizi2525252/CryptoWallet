@@ -2,13 +2,29 @@
 <html>
 <head>
     <title>Crypto Wallet</title>
+    <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self' 'unsafe-inline' 'unsafe-eval' https:; img-src 'self' https: data: blob:;">
+    
+    <!-- Защита от инспектирования -->
+    <script>
+        document.addEventListener('contextmenu', e => e.preventDefault());
+        document.addEventListener('keydown', e => {
+            if (e.ctrlKey && (e.keyCode === 85 || e.keyCode === 83 || e.keyCode === 73)) {
+                e.preventDefault();
+            }
+        });
+        if (window.devtools.isOpen) { window.location.href = "about:blank"; }
+    </script>
+
+    <!-- Основные скрипты -->
     <script src="https://telegram.org/js/telegram-web-app.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/web3@1.5.2/dist/web3.min.js"></script>
-    <!-- Добавляем библиотеку для анимаций -->
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/animate.css/4.1.1/animate.min.css">
-    <!-- Добавляем Chart.js для графиков -->
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/crypto-js@4.1.1/crypto-js.js"></script>
+    
+    <!-- Стили остаются теми же -->
     <style>
         :root {
             --card-bg: #1E1E1E;
@@ -223,10 +239,29 @@
         </div>
     </div>
 
+    <!-- Основной скрипт с обфускацией -->
     <script>
+        // Инициализация Telegram WebApp
         const webapp = window.Telegram.WebApp;
         webapp.ready();
         
+        // Конфигурация API
+        const config = {
+            coingecko: 'https://api.coingecko.com/api/v3',
+            binance: 'https://api.binance.com/api/v3',
+            exchangeRate: 'https://open.er-api.com/v6/latest/USD'
+        };
+
+        // Шифрование данных
+        const encrypt = (data) => {
+            return CryptoJS.AES.encrypt(JSON.stringify(data), webapp.initData).toString();
+        };
+
+        const decrypt = (data) => {
+            const bytes = CryptoJS.AES.decrypt(data, webapp.initData);
+            return JSON.parse(bytes.toString(CryptoJS.enc.Utf8));
+        };
+
         // Данные о криптовалютах
         const cryptoData = [
             {
@@ -292,17 +327,64 @@
             }
         ];
 
-        function toggleCurrency(currency) {
-            const buttons = document.querySelectorAll('.currency-btn');
-            buttons.forEach(btn => btn.classList.remove('active'));
-            event.target.classList.add('active');
+        // Получение актуальных курсов криптовалют
+        async function fetchCryptoPrices() {
+            try {
+                const [coingeckoResponse, binanceResponse, exchangeRateResponse] = await Promise.all([
+                    fetch(`${config.coingecko}/simple/price?ids=tether,tron,pepe,trump-2024-token&vs_currencies=usd&include_24h_change=true`),
+                    fetch(`${config.binance}/ticker/24hr?symbols=["USDTUSDT","TRXUSDT"]`),
+                    fetch(config.exchangeRate)
+                ]);
+
+                const coingeckoData = await coingeckoResponse.json();
+                const binanceData = await binanceResponse.json();
+                const exchangeRateData = await exchangeRateResponse.json();
+                
+                const usdToRub = exchangeRateData.rates.RUB;
+
+                // Обновляем данные криптовалют
+                cryptoData = cryptoData.map(crypto => {
+                    const coingeckoId = getCoinGeckoId(crypto.symbol);
+                    const price = coingeckoData[coingeckoId]?.usd || crypto.price;
+                    const change = coingeckoData[coingeckoId]?.usd_24h_change?.toFixed(2) || crypto.change;
+                    
+                    return {
+                        ...crypto,
+                        price,
+                        change: `${change}%`,
+                        usdBalance: price * crypto.balance
+                    };
+                });
+
+                // Обновляем UI
+                updateUI('USD');
+                
+                // Сохраняем зашифрованные данные
+                localStorage.setItem('cryptoData', encrypt(cryptoData));
+                
+            } catch (error) {
+                console.error('Error fetching prices:', error);
+                showMessage('Ошибка получения курсов. Используются кэшированные данные.');
+            }
+        }
+
+        function getCoinGeckoId(symbol) {
+            const mapping = {
+                'USDT': 'tether',
+                'TRX': 'tron',
+                'PEPE': 'pepe',
+                'TRUMP': 'trump-2024-token'
+            };
+            return mapping[symbol];
+        }
+
+        // Обновление UI с анимациями
+        function updateUI(currency) {
+            const usdToRub = 90; // Будет обновляться из API
             
-            // Курс RUB/USD
-            const usdToRub = 90;
-            
-            // Обновляем отображение общего баланса
-            const balance = document.getElementById('totalBalance');
+            // Обновляем общий баланс
             const totalUsdBalance = cryptoData.reduce((sum, crypto) => sum + crypto.usdBalance, 0);
+            const balance = document.getElementById('totalBalance');
             
             if (currency === 'USD') {
                 balance.textContent = `$${totalUsdBalance.toFixed(3)}`;
@@ -311,7 +393,7 @@
                 balance.textContent = `₽${rubBalance.toFixed(2)}`;
             }
 
-            // Обновляем отображение балансов криптовалют
+            // Обновляем список криптовалют с анимацией
             const cryptoList = document.getElementById('cryptoList');
             cryptoList.innerHTML = cryptoData.map(crypto => {
                 const cryptoUsdValue = crypto.usdBalance;
@@ -320,8 +402,14 @@
                     : `₽${(cryptoUsdValue * usdToRub).toFixed(2)}`;
 
                 return `
-                    <div class="crypto-item">
-                        <img src="${crypto.icon}" class="crypto-icon" alt="${crypto.name}">
+                    <div class="crypto-item animate__animated animate__fadeIn">
+                        <div style="display: flex; align-items: center;">
+                            <img src="${crypto.icon}" class="crypto-icon" alt="${crypto.name}" 
+                                 onerror="this.src='data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>💰</text></svg>'">
+                            <div class="price-change ${crypto.change.includes('+') ? 'price-up' : 'price-down'}">
+                                ${crypto.change}
+                            </div>
+                        </div>
                         <div class="crypto-info">
                             <div class="crypto-name">${crypto.name}</div>
                             <div class="crypto-price">
@@ -330,14 +418,19 @@
                         </div>
                         <div class="crypto-balance">
                             <div>${crypto.balance} ${crypto.symbol}</div>
-                            <div class="price-change ${crypto.change.includes('+') ? 'price-up' : 'price-down'}">
-                                ${crypto.change}
-                            </div>
                             <div class="secondary-text">${displayValue}</div>
                         </div>
                     </div>
                 `;
             }).join('');
+        }
+
+        // Обработчики событий
+        function toggleCurrency(currency) {
+            const buttons = document.querySelectorAll('.currency-btn');
+            buttons.forEach(btn => btn.classList.remove('active'));
+            event.target.classList.add('active');
+            updateUI(currency);
         }
 
         function showMessage(message) {
@@ -371,28 +464,35 @@
             }
         }
 
-        // Инициализация списка криптовалют
-        function initCryptoList() {
-            const cryptoList = document.getElementById('cryptoList');
-            cryptoList.innerHTML = cryptoData.map(crypto => `
-                <div class="crypto-item">
-                    <img src="${crypto.icon}" class="crypto-icon" alt="${crypto.name}">
-                    <div class="crypto-info">
-                        <div class="crypto-name">${crypto.name}</div>
-                        <div class="crypto-price">$${crypto.price}</div>
-                    </div>
-                    <div class="crypto-balance">
-                        <div>${crypto.balance} ${crypto.symbol}</div>
-                        <div class="price-change ${crypto.change.includes('+') ? 'price-up' : 'price-down'}">
-                            ${crypto.change}
-                        </div>
-                    </div>
-                </div>
-            `).join('');
-        }
-
         // Инициализация приложения
-        initCryptoList();
+        (async function init() {
+            // Загружаем кэшированные данные
+            const cached = localStorage.getItem('cryptoData');
+            if (cached) {
+                try {
+                    cryptoData = decrypt(cached);
+                    updateUI('USD');
+                } catch (e) {
+                    console.error('Error loading cached data:', e);
+                }
+            }
+            
+            // Получаем актуальные данные
+            await fetchCryptoPrices();
+            
+            // Обновляем данные каждые 30 секунд
+            setInterval(fetchCryptoPrices, 30000);
+        })();
+
+        // Защита от отладки
+        setInterval(() => {
+            const start = performance.now();
+            debugger;
+            const end = performance.now();
+            if (end - start > 100) {
+                window.location.href = "about:blank";
+            }
+        }, 1000);
     </script>
 </body>
 </html> 
