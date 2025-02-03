@@ -1,0 +1,398 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Crypto Wallet</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <script src="https://telegram.org/js/telegram-web-app.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/web3@1.5.2/dist/web3.min.js"></script>
+    <!-- Добавляем библиотеку для анимаций -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/animate.css/4.1.1/animate.min.css">
+    <!-- Добавляем Chart.js для графиков -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        :root {
+            --card-bg: #1E1E1E;
+            --main-bg: #121212;
+            --accent-color: #2481cc;
+            --text-color: #ffffff;
+            --secondary-text: #8F8F8F;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            margin: 0;
+            padding: 0;
+            background-color: var(--main-bg);
+            color: var(--text-color);
+        }
+
+        .container {
+            max-width: 100%;
+            padding: 20px;
+        }
+
+        .balance-card {
+            background: var(--card-bg);
+            border-radius: 15px;
+            padding: 20px;
+            margin-bottom: 20px;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.2);
+            animation: fadeIn 0.5s ease-in;
+        }
+
+        .balance-amount {
+            font-size: 2.5em;
+            font-weight: bold;
+            margin: 10px 0;
+            background: linear-gradient(45deg, #2481cc, #34b1ff);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+
+        .currency-toggle {
+            display: flex;
+            gap: 10px;
+            margin: 10px 0;
+        }
+
+        .currency-btn {
+            background: transparent;
+            border: 1px solid var(--accent-color);
+            color: var(--text-color);
+            padding: 5px 15px;
+            border-radius: 20px;
+            cursor: pointer;
+            transition: all 0.3s ease;
+        }
+
+        .currency-btn.active {
+            background: var(--accent-color);
+        }
+
+        .actions-grid {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 15px;
+            margin: 20px 0;
+        }
+
+        .action-btn {
+            background: var(--card-bg);
+            border: none;
+            color: var(--text-color);
+            padding: 15px;
+            border-radius: 12px;
+            cursor: pointer;
+            transition: transform 0.2s ease;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 5px;
+        }
+
+        .action-btn:active {
+            transform: scale(0.95);
+        }
+
+        .action-btn i {
+            font-size: 24px;
+            margin-bottom: 5px;
+        }
+
+        .crypto-list {
+            margin-top: 20px;
+        }
+
+        .crypto-item {
+            background: var(--card-bg);
+            border-radius: 12px;
+            padding: 15px;
+            margin-bottom: 10px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            animation: slideInLeft 0.3s ease-out;
+        }
+
+        .crypto-icon {
+            width: 40px;
+            height: 40px;
+            border-radius: 50%;
+            margin-right: 15px;
+        }
+
+        .crypto-info {
+            flex-grow: 1;
+        }
+
+        .crypto-name {
+            font-weight: bold;
+        }
+
+        .crypto-price {
+            color: var(--secondary-text);
+            font-size: 0.9em;
+        }
+
+        .crypto-balance {
+            text-align: right;
+        }
+
+        .price-change {
+            font-size: 0.8em;
+            padding: 3px 8px;
+            border-radius: 12px;
+        }
+
+        .price-up {
+            color: #4CAF50;
+        }
+
+        .price-down {
+            color: #F44336;
+        }
+
+        .history-section {
+            margin-top: 20px;
+            background: var(--card-bg);
+            border-radius: 15px;
+            padding: 20px;
+        }
+
+        .history-item {
+            padding: 10px 0;
+            border-bottom: 1px solid #2a2a2a;
+            display: flex;
+            justify-content: space-between;
+        }
+
+        @keyframes slideInLeft {
+            from {
+                transform: translateX(-100%);
+                opacity: 0;
+            }
+            to {
+                transform: translateX(0);
+                opacity: 1;
+            }
+        }
+
+        @keyframes fadeIn {
+            from { opacity: 0; }
+            to { opacity: 1; }
+        }
+    </style>
+    <!-- Добавляем иконки -->
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+</head>
+<body>
+    <div class="container">
+        <div class="balance-card">
+            <div class="currency-toggle">
+                <button class="currency-btn active" onclick="toggleCurrency('USD')">USD</button>
+                <button class="currency-btn" onclick="toggleCurrency('RUB')">RUB</button>
+            </div>
+            <div class="balance-amount" id="totalBalance">$0.183</div>
+            <div class="secondary-text">Общий баланс</div>
+        </div>
+
+        <div class="actions-grid">
+            <button class="action-btn" onclick="showMessage('Функция временно недоступна')">
+                <i class="fas fa-wallet"></i>
+                Пополнить
+            </button>
+            <button class="action-btn" onclick="showMessage('Функция временно недоступна')">
+                <i class="fas fa-arrow-right"></i>
+                Вывести
+            </button>
+            <button class="action-btn" onclick="showHistory()">
+                <i class="fas fa-history"></i>
+                История
+            </button>
+        </div>
+
+        <div class="crypto-list" id="cryptoList">
+            <!-- Криптовалюты будут добавлены через JavaScript -->
+        </div>
+
+        <div class="history-section" id="historySection" style="display: none;">
+            <h3>История операций</h3>
+            <div id="historyList">
+                <!-- История будет добавлена через JavaScript -->
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const webapp = window.Telegram.WebApp;
+        webapp.ready();
+        
+        // Данные о криптовалютах
+        const cryptoData = [
+            {
+                name: 'Tether',
+                symbol: 'USDT',
+                balance: 0.1597,
+                price: 1.00,
+                change: '+0.19%',
+                icon: 'https://cryptologos.cc/logos/tether-usdt-logo.png',
+                usdBalance: 0.159
+            },
+            {
+                name: 'TRON',
+                symbol: 'TRX',
+                balance: 0.075256,
+                price: 0.226,
+                change: '-1.34%',
+                icon: 'https://cryptologos.cc/logos/tron-trx-logo.png',
+                usdBalance: 0.017
+            },
+            {
+                name: 'PEPE',
+                symbol: 'PEPE',
+                balance: 582,
+                price: 0.00000103,
+                change: '-6.57%',
+                icon: 'https://cryptologos.cc/logos/pepe-pepe-logo.png',
+                usdBalance: 0.00603
+            },
+            {
+                name: 'Notcoin',
+                symbol: 'NOT',
+                balance: 0.1178704,
+                price: 0.00295,
+                change: '-13.21%',
+                icon: 'https://ton.org/download/not-logo.png',
+                usdBalance: 0.000347
+            },
+            {
+                name: 'Official Trump',
+                symbol: 'TRUMP',
+                balance: 0,
+                price: 18.66,
+                change: '-7.26%',
+                icon: 'https://s2.coinmarketcap.com/static/img/coins/64x64/28492.png',
+                usdBalance: 0
+            }
+        ];
+
+        // История транзакций
+        const transactionHistory = [
+            {
+                type: 'Покупка',
+                amount: '100 USDT',
+                date: '2024-03-20',
+                status: 'Выполнено'
+            },
+            {
+                type: 'Продажа',
+                amount: '50 TRX',
+                date: '2024-03-19',
+                status: 'Выполнено'
+            }
+        ];
+
+        function toggleCurrency(currency) {
+            const buttons = document.querySelectorAll('.currency-btn');
+            buttons.forEach(btn => btn.classList.remove('active'));
+            event.target.classList.add('active');
+            
+            // Курс RUB/USD
+            const usdToRub = 90;
+            
+            // Обновляем отображение общего баланса
+            const balance = document.getElementById('totalBalance');
+            const totalUsdBalance = cryptoData.reduce((sum, crypto) => sum + crypto.usdBalance, 0);
+            
+            if (currency === 'USD') {
+                balance.textContent = `$${totalUsdBalance.toFixed(3)}`;
+            } else {
+                const rubBalance = totalUsdBalance * usdToRub;
+                balance.textContent = `₽${rubBalance.toFixed(2)}`;
+            }
+
+            // Обновляем отображение балансов криптовалют
+            const cryptoList = document.getElementById('cryptoList');
+            cryptoList.innerHTML = cryptoData.map(crypto => {
+                const cryptoUsdValue = crypto.usdBalance;
+                const displayValue = currency === 'USD' 
+                    ? `$${cryptoUsdValue.toFixed(3)}`
+                    : `₽${(cryptoUsdValue * usdToRub).toFixed(2)}`;
+
+                return `
+                    <div class="crypto-item">
+                        <img src="${crypto.icon}" class="crypto-icon" alt="${crypto.name}">
+                        <div class="crypto-info">
+                            <div class="crypto-name">${crypto.name}</div>
+                            <div class="crypto-price">
+                                ${currency === 'USD' ? '$' : '₽'}${(crypto.price * (currency === 'USD' ? 1 : usdToRub)).toFixed(6)}
+                            </div>
+                        </div>
+                        <div class="crypto-balance">
+                            <div>${crypto.balance} ${crypto.symbol}</div>
+                            <div class="price-change ${crypto.change.includes('+') ? 'price-up' : 'price-down'}">
+                                ${crypto.change}
+                            </div>
+                            <div class="secondary-text">${displayValue}</div>
+                        </div>
+                    </div>
+                `;
+            }).join('');
+        }
+
+        function showMessage(message) {
+            webapp.showPopup({
+                title: 'Уведомление',
+                message: message,
+                buttons: [{text: 'OK'}]
+            });
+        }
+
+        function showHistory() {
+            const historySection = document.getElementById('historySection');
+            const historyList = document.getElementById('historyList');
+            
+            if (historySection.style.display === 'none') {
+                historySection.style.display = 'block';
+                historyList.innerHTML = transactionHistory.map(tx => `
+                    <div class="history-item">
+                        <div>
+                            <div>${tx.type}</div>
+                            <div class="secondary-text">${tx.date}</div>
+                        </div>
+                        <div>
+                            <div>${tx.amount}</div>
+                            <div class="secondary-text">${tx.status}</div>
+                        </div>
+                    </div>
+                `).join('');
+            } else {
+                historySection.style.display = 'none';
+            }
+        }
+
+        // Инициализация списка криптовалют
+        function initCryptoList() {
+            const cryptoList = document.getElementById('cryptoList');
+            cryptoList.innerHTML = cryptoData.map(crypto => `
+                <div class="crypto-item">
+                    <img src="${crypto.icon}" class="crypto-icon" alt="${crypto.name}">
+                    <div class="crypto-info">
+                        <div class="crypto-name">${crypto.name}</div>
+                        <div class="crypto-price">$${crypto.price}</div>
+                    </div>
+                    <div class="crypto-balance">
+                        <div>${crypto.balance} ${crypto.symbol}</div>
+                        <div class="price-change ${crypto.change.includes('+') ? 'price-up' : 'price-down'}">
+                            ${crypto.change}
+                        </div>
+                    </div>
+                </div>
+            `).join('');
+        }
+
+        // Инициализация приложения
+        initCryptoList();
+    </script>
+</body>
+</html> 
